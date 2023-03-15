@@ -1,0 +1,273 @@
+---
+title: "Ashish Bhandari Project 1"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Project 
+
+Develop a set of Logistic regression model from the 89 specimens that you can use to predict the group membership of the remaining 199 specimens’. 
+
+1. Format the data contained in the excel spreadsheet for use in R.
+
+2. Perform an exploratory data analysis.
+
+3.	Explain your GLM and assess the quality of the fit with the classified observations.   
+  -	Use Cross Validation to predict the accuracy of your model.
+
+4.	Provide a one-page write-up (excluding graphs, tables and figures) explaining your analysis of the dataset and your recommendations on the usefulness of your predictions. 
+
+5.	Provide predictions for the unclassified observations. 		
+6.	As a secondary component provide annotated code that replicates your analysis.
+	
+
+### Source
+Airoldi, J.-P., B. Flury, M. Salvioni (1996) "Discrimination between two species of Microtus using both classified and unclassified observations" Journal of Theoretical Biology 177:247-262
+
+## Vole Skull Excell Spread Sheet 
+
+### Description
+Microtus multiplex and M. subterraneus are difficult to distinguish morphologically. Here we have 43 known multiplex voles, 46 known subterraneus voles and a further 199 unidentified voles.
+
+#### Data
+288 Skulls from 2 species of voles with up to 3 measurements on  each of the vole skulls.  Note that some of the skulls labeled as unknown are missing some of the features. So that you will have to build separate models for the skulls that only have a subset of the features.
+
+#### Group
+a factor with levels 
+-multiplex 
+-subterraneus 
+-unknown
+
+#### Length
+Condylo incisive length or skull length (0.01mm)
+
+#### Height
+Skull height above bullae (0.01mm)
+
+#### Rostrum
+Skull width across rostrum (0.01mm)
+
+### Details
+89 species have been identified by means of chromosomal analysis.
+
+### Overview:
+For this assigned project, we are given datasets on two different species of 
+Microtus. Microtus is a genus of voles found in North America, Europe and 
+northern Asia. From the given datasets of two different species *multiplex* 
+and *subterraneus*, there are a total 43 known *multiplex* voles, 46 
+known *subterraneus* voles and a total of 199 unidentified voles.
+
+Firstly, we load different libraries that is required for this project.
+```{r libraries, message=FALSE}
+# loading libraries
+#install.packages("GGally")
+#install.packages("rpart")
+library(readxl)
+library(tidyverse)
+library(boot)
+library(dplyr)
+library(ggplot2)
+library(GGally)
+library(rpart)
+```
+We will be extracting datasets from our folder and assigning them, renaming
+them with same column names for easiness and then combining our datasets.
+```{r data}
+# loading data from the excel sheet
+data3 <- read_excel("C:/Users/ashis/Documents/Dakota State University/STAT 601/Project 1 new/Vole Skulls.xlsm", sheet = "Unknown")
+data2 <- read_excel("C:/Users/ashis/Documents/Dakota State University/STAT 601/Project 1 new/Vole Skulls.xlsm", sheet = "Subterraneus")
+data1 <- read_excel("C:/Users/ashis/Documents/Dakota State University/STAT 601/Project 1 new/Vole Skulls.xlsm", sheet = "Multiplex")
+
+
+# renaming column names of each datasets
+names(data1) <- c("Index", "Details", "Length", "Height", "Width")
+names(data2) <- c("Index", "Details", "Length", "Height", "Width")
+names(data3) <- c("Index", "Details", "Length", "Height", "Width")
+
+# combining all 3 datasets
+new_data <- rbind(data1, data2)
+```
+Some outliers are due to the natural variations in the population, and they
+should be left as is in our datasets. These are called true outliers. Other 
+outliers are impossible values to obtain and should be removed because they 
+represent measurement errors, data entry or processing errors, or poor sampling.
+In case of the dataset provided to us, there were some datasets that looked
+like data entry error. Those entries (rows) were replaced with NA values and 
+later were removed from the datasets.
+```{r}
+# finding out outliers in the datasets
+
+length_out1 <- boxplot.stats(new_data$Length)
+length_out1$out
+
+length_out2 <- boxplot.stats(data3$Length)
+length_out2$out
+
+height_out1 <- boxplot.stats(new_data$Height)
+height_out1$out
+
+height_out2 <- boxplot.stats(data3$Height)
+height_out2$out
+
+weight_out1 <- boxplot.stats(new_data$Width)
+weight_out1$out
+
+weight_out2 <- boxplot.stats(data3$Width)
+weight_out2$out
+
+# Replacing outliers with NA values
+
+new_data[new_data$Length %in% length_out1$out, "Length"] = NA
+new_data[new_data$Height %in% height_out1$out, "Height"] = NA
+new_data[new_data$Width %in% weight_out1$out, "Width"] = NA
+
+data3[data3$Length %in% length_out2$out, "Length"] = NA
+data3[data3$Height %in% height_out2$out, "Height"] = NA
+data3[data3$Width %in% weight_out2$out, "Width"] = NA
+
+# removing the rows that have N/As
+new_voles_data <- new_data[complete.cases(new_data), ]
+summary(new_voles_data)
+
+data_unknown <- data3[complete.cases(data3), ]
+
+plot_data1 <- plot(new_voles_data$`Height`~ new_voles_data$`Length`,  
+                   main = "Height vs Length", xlab = "Height of the skull",
+                   ylab = "Length of the skull")
+
+plot_data2 <- plot(new_voles_data$`Width` ~ new_voles_data$`Length`, 
+                   main = "Width vs Length", xlab= "Width of the skull",
+                   ylab = "Length of the skull")
+
+plot_data3 <- plot(new_voles_data$`Height`~ new_voles_data$`Width`,
+                   main = "Height vs Width", xlab = "Height of the skull", 
+                   ylab = "Width of the skull")
+
+# boxplots using different variables
+length_plot <- boxplot(new_voles_data$Length, main = "Skull length of known 
+vole species", xlab = "Skull length", ylab = "Length in mm", col = "green")
+length_plot
+
+height_plot <- boxplot(new_voles_data$Height, main = "Skull height of known vole 
+                       species",xlab = "Skull height", ylab = "Height in mm",
+                       col = "red")
+height_plot
+
+width_plot <- boxplot(new_voles_data$Width, main = "Skull width of known vole
+            species", xlab = "Skull width", ylab = "Width in mm", col = "blue")
+width_plot
+
+```
+From our scatterplots, we can derive that there is a linear relationship
+between height vs length or length vs width or height vs width.
+
+```{r}
+# We have to use ifelse statement to assign 1s and 0s for 
+# *subterraneus* and 0s for *multiplex* respectively.
+
+new_voles_data$Index <- ifelse(new_voles_data$Details == "multiplex", 0,1)
+new_voles_data
+
+# finding out proportions for the dataset
+propn <- prop.table(table(new_voles_data$Details))
+propn
+```
+The proportion values for *multiplex* species and *subterraneus* are: 0.4878049 
+and 0.5121951 respectively. This indicates they are almost as same proportions 
+in the dataset.
+```{r Plot Correlatiopn, message=FALSE}
+# co-relation plotting
+plot_corr <- ggpairs(data = new_voles_data, )
+plot_corr
+```
+We find out that the correlation between width and length is stronger. It has a
+positive co-relation of 0.873.
+```{r}
+# Density plots
+ggplot_length <- ggplot(new_voles_data, aes(Length)) + geom_density() + 
+  labs(x="Skull Length", y="Density", title = "Skull Length")
+ggplot_length
+
+ggplot_width <- ggplot(new_voles_data, aes(Width)) + geom_density() + 
+  labs(x="Skull Length", y="Density", title = "Skull Width")
+print(ggplot_width)
+
+ggplot_height <- ggplot(new_voles_data, aes(Height)) + geom_density() +
+  labs(x="Skull Length", y="Density", title = "Skull Height")
+ggplot_height
+
+set.seed(50)
+# dividing the dataset to 80/20 split for training and testing
+sample_data <- sample(1:nrow(new_voles_data),0.80*nrow(new_voles_data))
+
+train_data <- new_voles_data[(sample_data), ] 
+test_data <- new_voles_data[-sample_data, ]
+
+# Now, we build our models to find out the best amongst them
+
+model1 <- glm(as.factor(Details) ~ Length, data = train_data, 
+              family = binomial())
+summary(model1)
+
+model2 <- glm(as.factor(Details) ~ Height, data = train_data, 
+              family = binomial())
+summary(model2)
+
+model3 <- glm(as.factor(Details) ~ Width, data = train_data,
+              family = binomial())
+summary(model3)
+
+model4 <- glm(as.factor(Details)~ Length + Height, data = train_data, 
+              family = binomial())
+summary(model4)
+
+model5 <- glm(as.factor(Details)~ Length + Width, data = train_data,
+              family = binomial())
+summary(model5)
+
+model6 <- glm(as.factor(Details)~ Length + Height + Width, 
+              data = train_data, family = binomial())
+summary(model6)
+```
+One of the ways to find out the effectiveness of a model is Cross-validation
+technique. We have used K-fold cross validation for our models.
+```{r}
+
+# cross validation errors for our model
+error1 <- cv.glm(train_data, model1, K = 65)
+error1$delta[1]
+
+error2 <- cv.glm(train_data, model2, K = 65)
+error2$delta[1]
+
+error3 <- cv.glm(train_data, model3, K = 65)
+error3$delta[1]
+
+error4 <- cv.glm(train_data, model4, K = 65)
+error4$delta[1]
+
+error5 <- cv.glm(train_data, model5, K = 65)
+error5$delta[1]
+
+error6 <- cv.glm(train_data, model6, K = 65)
+error6$delta[1]
+
+```
+In the above cross validation calculations, we have found out that the
+error for model 6 is 0.096, which is far lesser compared to other models.
+Thus, we can say that model 6 is the best model for future predictions.
+```{r}
+
+#predicting the unknown species in the dataset
+pred_uknown <- rpart(as.factor(Details)~ Length + Height + Width,
+                     data = train_data)
+predict(pred_uknown, newdata = test_data, type="class")
+```
+Finally, we were able to predict the results of our unknown species in the
+given datasets. Our model had a error rate of 9.6% which is great for our 82
+known species.
